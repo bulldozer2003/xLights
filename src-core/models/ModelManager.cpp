@@ -1564,11 +1564,15 @@ void ModelManager::AddModel(Model* model)
         // about to free, or silently dropped it from the group until something
         // else happened to reset them.
         models[model->name] = model;
+        // Bumped before the groups are reset, not after: ResetModels stamps
+        // whatever generation is current when it runs, so incrementing
+        // afterwards left every group looking stale to EnsureModelsCurrent and
+        // bought a second, redundant re-resolve at some arbitrary later point.
+        _modelGeneration++;
         if (oldm != nullptr) {
             ResetModelGroups();
             delete oldm;
         }
-        _modelGeneration++;
     }
 }
 
@@ -1587,9 +1591,9 @@ void ModelManager::ReplaceModel(const std::string &name, Model* nm) {
             }
         }
         models[nm->name] = nm;
+        _modelGeneration++;
         ResetModelGroups();
         delete oldm;
-        _modelGeneration++;
     }
 }
 
@@ -2294,6 +2298,7 @@ bool ModelManager::Delete(const std::string& name)
                 }
                 _setManager.OnModelDeleted(mn);
                 models.erase(it);
+                _modelGeneration++;
                 ResetModelGroups();
 
                 // If models are chained to us then make their start channel ... our start channel
@@ -2305,7 +2310,6 @@ bool ModelManager::Delete(const std::string& name)
                 }
 
                 delete model;
-                _modelGeneration++;
                 if (_renderContext) _renderContext->MarkRgbEffectsChanged();
                 return true;
             }

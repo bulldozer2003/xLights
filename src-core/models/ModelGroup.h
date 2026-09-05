@@ -10,10 +10,13 @@
  * License: https://github.com/xLightsSequencer/xLights/blob/master/License.txt
  **************************************************************/
 
+#include <atomic>
 #include <limits>
 #include <vector>
 #include <set>
+#include <shared_mutex>
 #include <string>
+#include <thread>
 
 #include "Model.h"
 #include "Color.h"
@@ -128,6 +131,19 @@ class ModelGroup : public ModelWithScreenLocation<BoxedScreenLocation>
         // they were built. Submodels are freed by their parent Model, so a
         // name in this group can go dangling with no call reaching us.
         void EnsureModelsCurrent() const;
+
+        // The render-facing cache (Nodes, models, activeModels, changeCount and
+        // the geometry derived from them) is read from render worker threads
+        // while the main thread can rebuild it - a group is rebuilt whenever a
+        // member's change count moves, which happens freely during a background
+        // render. Readers take it shared for the whole read; the two mutators
+        // (RebuildBuffers, ResetModels) take it exclusively. cacheWriter lets
+        // the mutating thread re-enter its own read paths (rebuilding walks the
+        // members, and a member can be a nested group) without self-deadlock.
+        mutable std::shared_mutex cacheLock;
+        mutable std::atomic<std::thread::id> cacheWriter{};
+
+        bool HoldsCacheWrite() const { return cacheWriter.load(std::memory_order_relaxed) == std::this_thread::get_id(); }
 
         std::vector<std::string> modelNames;
         mutable std::vector<Model *> models;

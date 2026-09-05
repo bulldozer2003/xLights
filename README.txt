@@ -12,6 +12,13 @@ XLIGHTS/NUTCRACKER RELEASE NOTES
 ---------------------------------
 2026.17  September ??, 2026
 
+    -bug (dkulp)                 Fix a crash rendering a model group while the layout was being
+                                 edited - the group's cached member list and nodes could be rebuilt
+                                 out from under the render threads reading them
+    -bug (dkulp)                 Fix a crash opening the File menu when the show folder is on a drive
+                                 that does not keep file versions, such as an external or network disk
+    -bug (dkulp)                 Fix a crash releasing the mouse in the Sketch effect assist panel
+                                 after the selected path changed mid-drag
     -bug (derwin12)              Face and State definition names can no longer contain commas or other
                                  characters that submodel names already disallow, whether typed in or
                                  brought in from an imported model file (#7026)
