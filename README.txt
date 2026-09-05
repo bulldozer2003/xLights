@@ -12,6 +12,9 @@ XLIGHTS/NUTCRACKER RELEASE NOTES
 ---------------------------------
 2026.17  September ??, 2026
 
+    -bug (dkulp)                 The Batch Render dialog no longer flashes a progress window while it
+                                 scans for sequences unless the scan is actually slow, and it updates
+                                 that window far less often when it is shown
     -bug (dkulp)                 Fix a crash rendering a model group while the layout was being
                                  edited - the group's cached member list and nodes could be rebuilt
                                  out from under the render threads reading them

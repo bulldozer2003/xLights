@@ -25,6 +25,10 @@
 
 #include <wx/dir.h>
 #include <wx/menu.h>
+#include <wx/time.h>
+
+#include <memory>
+
 #include "settings/XLightsConfigAdapter.h"
 #include "utils/ExternalHooks.h"
 #include "UtilFunctions.h"
@@ -206,10 +210,52 @@ wxArrayString BatchRenderDialog::GetFileList() const
     return lst;
 }
 
+// wxProgressDialog::Pulse() runs a nested event loop on every call. Pulsing per
+// directory both dominates the scan and makes AppKit step the just-shown dialog's
+// animations from that nested loop ("Animating backwards in time!" on the console),
+// so put the dialog up only if the scan is actually slow and pulse at a fixed rate.
+class SeqScanProgress {
+public:
+    explicit SeqScanProgress(wxWindow* parent) : m_parent(parent), m_start(wxGetUTCTimeMillis()) {}
+
+    void Pulse(const wxString& msg) {
+        const wxLongLong now = wxGetUTCTimeMillis();
+        if (m_dlg == nullptr) {
+            if (now - m_start < SHOW_DELAY_MS) {
+                return;
+            }
+            m_dlg = std::make_unique<wxProgressDialog>("Searching for Sequences", msg, 100, m_parent);
+            m_last = now;
+            return;
+        }
+        if (now - m_last < PULSE_INTERVAL_MS) {
+            return;
+        }
+        m_last = now;
+        m_dlg->Pulse(msg);
+    }
+
+    void Done() {
+        if (m_dlg != nullptr) {
+            m_dlg->Update(100);
+            m_dlg->Hide();
+        }
+    }
+
+private:
+    static constexpr long SHOW_DELAY_MS = 400;
+    static constexpr long PULSE_INTERVAL_MS = 100;
+
+    wxWindow* m_parent;
+    wxLongLong m_start;
+    wxLongLong m_last { 0 };
+    std::unique_ptr<wxProgressDialog> m_dlg;
+};
+
 namespace {
 class SeqFileTraverser : public wxDirTraverser {
 public:
-    SeqFileTraverser(const wxString& root, wxArrayString& out, wxProgressDialog* prgs)
+    SeqFileTraverser(const wxString& root, wxArrayString& out, SeqScanProgress* prgs)
         : m_root(root), m_out(out), m_prgs(prgs) {}
 
     wxDirTraverseResult OnFile(const wxString& path) override {
@@ -239,11 +285,11 @@ public:
 private:
     wxString m_root;
     wxArrayString& m_out;
-    wxProgressDialog* m_prgs;
+    SeqScanProgress* m_prgs;
 };
 } // namespace
 
-void BatchRenderDialog::GetSeqList(const wxString& folder, wxProgressDialog* prgs)
+void BatchRenderDialog::GetSeqList(const wxString& folder, SeqScanProgress* prgs)
 {
     wxArrayString files;
     wxDir dir(folder);
@@ -287,9 +333,7 @@ void BatchRenderDialog::GetFolderList(const wxString& folder) const {
 
 bool BatchRenderDialog::Prepare(const wxString &showDir)
 {
-    wxProgressDialog prgs("Searching for Sequences",
-                          "Searching for Sequences", 100, this);
-    prgs.Show();
+    SeqScanProgress prgs(this);
     showDirectory = showDir;
     prgs.Pulse("Searching for Folder");
     GetFolderList(showDir);
@@ -332,8 +376,7 @@ bool BatchRenderDialog::Prepare(const wxString &showDir)
             }
         }
     }
-    prgs.Update(100);
-    prgs.Hide();
+    prgs.Done();
     ValidateWindow();
     return true;
 }
